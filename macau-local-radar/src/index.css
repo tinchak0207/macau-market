@@ -1,0 +1,550 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-[#FCFCFD] text-[#1d1d1f] antialiased selection:bg-black/10;
+    /* Soft pastel gradient mixing pale grey, muted blue and soft pink */
+    background-image: 
+      radial-gradient(circle at 10% 10%, rgba(246, 238, 243, 1) 0%, transparent 45%),
+      radial-gradient(circle at 90% 15%, rgba(240, 238, 245, 1) 0%, transparent 45%),
+      radial-gradient(circle at 85% 90%, rgba(234, 240, 248, 1) 0%, transparent 45%),
+      radial-gradient(circle at 15% 85%, rgba(240, 244, 248, 1) 0%, transparent 45%);
+    background-attachment: fixed;
+    background-size: cover;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Inter", sans-serif;
+  }
+}
+
+@layer utilities {
+  .noise-overlay {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    border-radius: inherit;
+    mix-blend-mode: overlay;
+  }
+
+  .liquid-capsule {
+    @apply bg-white/40 backdrop-blur-[20px] rounded-[32px] relative shadow-[0_4px_24px_rgba(0,0,0,0.02)];
+  }
+
+  .liquid-capsule::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .liquid-capsule-sm {
+    @apply bg-white/40 backdrop-blur-[20px] rounded-[24px] relative shadow-[0_2px_12px_rgba(0,0,0,0.02)];
+  }
+
+  .liquid-capsule-sm::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .liquid-panel {
+    @apply bg-white/40 backdrop-blur-[20px] rounded-[24px] relative shadow-[0_8px_32px_rgba(0,0,0,0.02)];
+  }
+
+  .liquid-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .liquid-glass-tab-bar {
+    @apply bg-white/40 backdrop-blur-[24px] rounded-[100px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] relative;
+  }
+  
+  .liquid-glass-tab-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Physical Material Noise Layer */
+  .liquid-capsule::after, .liquid-capsule-sm::after, .liquid-panel::after, .liquid-glass-tab-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+    border-radius: inherit;
+    z-index: 1;
+    mix-blend-mode: overlay;
+  }
+
+  /* Ensure content is above noise */
+  .liquid-capsule > *, .liquid-capsule-sm > *, .liquid-panel > *, .liquid-glass-tab-bar > * {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Hide scrollbar completely but allow scrolling */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .text-gradient-apple {
+    background: linear-gradient(135deg, #D98CB3 0%, #8CA7D9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .desktop-market-shell {
+    position: relative;
+    min-height: 100dvh;
+    overflow: hidden;
+    color: #f3efe7;
+    background:
+      radial-gradient(circle at top left, rgba(205, 125, 58, 0.22), transparent 30%),
+      radial-gradient(circle at top right, rgba(77, 98, 176, 0.24), transparent 28%),
+      linear-gradient(135deg, #16181d 0%, #101114 45%, #1f232a 100%);
+  }
+
+  .desktop-market-bg {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0.35));
+    pointer-events: none;
+  }
+
+  .desktop-market-frame {
+    position: relative;
+    z-index: 1;
+    width: min(1440px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: 32px 0 40px;
+  }
+
+  .desktop-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 28px 32px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 32px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03));
+    backdrop-filter: blur(24px);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.35);
+  }
+
+  .desktop-hero__brand {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .desktop-hero__badge {
+    display: grid;
+    place-items: center;
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+    color: #ffd39a;
+    background: linear-gradient(135deg, rgba(255,183,94,0.2), rgba(244,120,86,0.2));
+    border: 1px solid rgba(255,211,154,0.3);
+  }
+
+  .desktop-eyebrow {
+    margin: 0 0 8px;
+    font-size: 12px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: rgba(243, 239, 231, 0.58);
+  }
+
+  .desktop-hero h1 {
+    margin: 0;
+    font-size: clamp(32px, 3.2vw, 48px);
+    line-height: 1.05;
+    font-weight: 800;
+  }
+
+  .desktop-hero__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+    gap: 14px;
+  }
+
+  .desktop-metric-card,
+  .desktop-panel,
+  .desktop-goods-card,
+  .desktop-empty-card,
+  .desktop-recipe-card,
+  .desktop-price-row,
+  .desktop-related-row {
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(16px);
+  }
+
+  .desktop-metric-card {
+    padding: 18px 20px;
+    border-radius: 22px;
+  }
+
+  .desktop-metric-card span {
+    display: block;
+    font-size: 12px;
+    color: rgba(243, 239, 231, 0.58);
+    margin-bottom: 10px;
+  }
+
+  .desktop-metric-card strong {
+    font-size: 28px;
+    font-weight: 800;
+  }
+
+  .desktop-content-grid {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .desktop-sidebar,
+  .desktop-main {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .desktop-panel {
+    border-radius: 30px;
+    padding: 24px;
+  }
+
+  .desktop-panel--dark {
+    background: linear-gradient(180deg, rgba(255, 174, 94, 0.12), rgba(255,255,255,0.04));
+  }
+
+  .desktop-panel--search {
+    padding: 18px 20px;
+  }
+
+  .desktop-panel__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(243, 239, 231, 0.72);
+  }
+
+  .desktop-category-list,
+  .desktop-goods-grid,
+  .desktop-price-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .desktop-category-button,
+  .desktop-goods-card {
+    width: 100%;
+    border-radius: 22px;
+    transition: 180ms ease;
+  }
+
+  .desktop-category-button {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 18px;
+    color: #f3efe7;
+    background: rgba(255,255,255,0.03);
+  }
+
+  .desktop-category-button.is-active,
+  .desktop-category-button:hover,
+  .desktop-goods-card.is-active,
+  .desktop-goods-card:hover {
+    transform: translateY(-1px);
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,211,154,0.28);
+  }
+
+  .desktop-recipe-card {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .desktop-recipe-card__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .desktop-recipe-card__head h3,
+  .desktop-price-row p,
+  .desktop-related-row span,
+  .desktop-goods-card p {
+    margin: 0;
+  }
+
+  .desktop-recipe-card__head h3 {
+    font-size: 17px;
+    font-weight: 700;
+  }
+
+  .desktop-recipe-card__head span {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffd39a;
+  }
+
+  .desktop-recipe-card p {
+    margin: 0;
+    color: rgba(243, 239, 231, 0.62);
+    line-height: 1.55;
+  }
+
+  .desktop-search {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 18px;
+    background: rgba(11, 13, 17, 0.38);
+    color: rgba(243, 239, 231, 0.62);
+  }
+
+  .desktop-search input {
+    width: 100%;
+    border: 0;
+    outline: 0;
+    color: #f3efe7;
+    background: transparent;
+    font-size: 16px;
+  }
+
+  .desktop-search input::placeholder {
+    color: rgba(243, 239, 231, 0.42);
+  }
+
+  .desktop-market-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+    gap: 24px;
+  }
+
+  .desktop-goods-grid {
+    max-height: calc(100dvh - 290px);
+    overflow: auto;
+    padding-right: 6px;
+  }
+
+  .desktop-goods-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 18px;
+    text-align: left;
+  }
+
+  .desktop-goods-card p {
+    margin-bottom: 6px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fffaf1;
+  }
+
+  .desktop-goods-card span {
+    font-size: 13px;
+    color: rgba(243, 239, 231, 0.58);
+  }
+
+  .desktop-goods-card strong {
+    font-size: 20px;
+    color: #ffd39a;
+    white-space: nowrap;
+  }
+
+  .desktop-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .desktop-detail__summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-end;
+    padding: 20px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255,183,94,0.14), rgba(91,119,208,0.1));
+    border: 1px solid rgba(255,211,154,0.14);
+  }
+
+  .desktop-detail__summary h2 {
+    margin: 6px 0 0;
+    font-size: 28px;
+    line-height: 1.15;
+  }
+
+  .desktop-detail__label {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(243, 239, 231, 0.6);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .desktop-detail__price {
+    text-align: right;
+  }
+
+  .desktop-detail__price span {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: rgba(243, 239, 231, 0.6);
+  }
+
+  .desktop-detail__price strong {
+    font-size: 32px;
+    color: #ffd39a;
+  }
+
+  .desktop-detail__meta > div {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    color: rgba(243, 239, 231, 0.72);
+    background: rgba(255,255,255,0.05);
+  }
+
+  .desktop-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: rgba(243, 239, 231, 0.76);
+  }
+
+  .desktop-price-row,
+  .desktop-related-row,
+  .desktop-empty-card {
+    border-radius: 20px;
+    padding: 16px 18px;
+  }
+
+  .desktop-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .desktop-price-row p {
+    margin-bottom: 4px;
+    font-weight: 700;
+    color: #fffaf1;
+  }
+
+  .desktop-price-row span {
+    font-size: 13px;
+    color: rgba(243, 239, 231, 0.58);
+  }
+
+  .desktop-price-row strong {
+    font-size: 20px;
+    color: #ffd39a;
+  }
+
+  .desktop-related {
+    padding-top: 8px;
+  }
+
+  .desktop-related-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 10px;
+  }
+
+  .desktop-empty,
+  .desktop-empty-card {
+    color: rgba(243, 239, 231, 0.62);
+  }
+
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 1279px) {
+    .desktop-content-grid,
+    .desktop-market-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .desktop-goods-grid {
+      max-height: none;
+    }
+  }
+}
