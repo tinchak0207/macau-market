@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ChefHat, Store, Search, ChevronDown, ChevronRight, AlertCircle, Info, TrendingDown, Fish, Beef, Leaf, Sprout, Shell, ShoppingBag, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { buildApiUrl } from '../lib/api';
 
 const SIDEBAR_CATEGORY_LABELS: Record<string, string> = {
   新鮮食用蔬菜類: '蔬菜',
@@ -48,10 +49,24 @@ export default function GroceryPanel({ view = 'deals' }: GroceryPanelProps) {
     fetchRecipes();
   }, []);
 
+  const fetchJson = async (input: string, init?: RequestInit) => {
+    const res = await fetch(buildApiUrl(input), init);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!contentType.includes('application/json')) {
+      const body = await res.text();
+      throw new Error(
+        `Expected JSON from ${input}, received ${res.status} ${res.statusText}: ${body.slice(0, 120)}`
+      );
+    }
+
+    const data = await res.json();
+    return { res, data };
+  };
+
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/grocery/categories');
-      const data = await res.json();
+      const { data } = await fetchJson('/api/grocery/categories');
       if (data?.data && Array.isArray(data.data)) {
         setCategories(data.data);
         if (data.data.length > 0) {
@@ -67,12 +82,11 @@ export default function GroceryPanel({ view = 'deals' }: GroceryPanelProps) {
 
   const fetchGoods = async (categoryId: string) => {
     try {
-      const res = await fetch('/api/grocery/goods', {
+      const { data } = await fetchJson('/api/grocery/goods', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category_id: categoryId })
       });
-      const data = await res.json();
       if (data && data.data) {
         setAllGoods(prev => ({ ...prev, [categoryId]: data.data }));
       } else {
@@ -86,8 +100,7 @@ export default function GroceryPanel({ view = 'deals' }: GroceryPanelProps) {
 
   const fetchRecipes = async () => {
     try {
-      const res = await fetch('/api/grocery/recipes');
-      const data = await res.json();
+      const { res, data } = await fetchJson('/api/grocery/recipes');
       if (data?.recipes) {
         setRecipes(data.recipes);
         setDbError(null);
@@ -111,12 +124,11 @@ export default function GroceryPanel({ view = 'deals' }: GroceryPanelProps) {
     if (!priceData[itemId]) {
       setLoadingPriceId(itemId);
       try {
-        const res = await fetch('/api/grocery/prices', {
+        const { data } = await fetchJson('/api/grocery/prices', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ goods_id: itemId, goods_item_id: itemCategoryId })
         });
-        const data = await res.json();
         if (data && data.data) {
           const sortedPrices = data.data.sort((a: any, b: any) => parseFloat(a.price || a.low_catty_price) - parseFloat(b.price || b.low_catty_price));
           setPriceData(prev => ({ ...prev, [itemId]: sortedPrices }));
