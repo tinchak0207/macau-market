@@ -2,8 +2,15 @@ node_modules/
 build/
 dist/
 coverage/
+.logs/
 .DS_Store
 *.log
 .env*
 !.env.example
 .share/
+scripts/bin/
+.vercel/
+.wrangler/
+*.local
+*.tmp
+*.cache
