@@ -1,0 +1,16 @@
+{
+  "appId": "xyz.tinchak0207.market",
+  "appName": "買餸",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1200,
+      "backgroundColor": "#fcfcfd",
+      "showSpinner": false
+    }
+  }
+}

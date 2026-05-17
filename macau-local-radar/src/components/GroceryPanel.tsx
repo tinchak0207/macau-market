@@ -2,7 +2,29 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ChefHat, Store, Search, ChevronDown, ChevronRight, AlertCircle, Info, TrendingDown, Fish, Beef, Leaf, Sprout, Shell, ShoppingBag, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export default function GroceryPanel({ view = 'deals' }) {
+const SIDEBAR_CATEGORY_LABELS: Record<string, string> = {
+  新鮮食用蔬菜類: '蔬菜',
+  '魚類-淡水魚': '淡水魚',
+  '魚類-鹹水魚': '鹹水魚',
+  '魚類-海魚': '海魚',
+  海產品類: '海產',
+  海產類: '海產',
+  豬肉類: '豬肉',
+  牛肉類: '牛肉',
+};
+
+function getSidebarCategoryLabel(name?: string | null) {
+  if (!name) return '';
+  return SIDEBAR_CATEGORY_LABELS[name] || name;
+}
+
+
+type GroceryPanelProps = {
+  view?: string;
+  mode?: 'mobile' | 'desktop' | string;
+};
+
+export default function GroceryPanel({ view = 'deals' }: GroceryPanelProps) {
   const [categories, setCategories] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
@@ -158,8 +180,8 @@ export default function GroceryPanel({ view = 'deals' }) {
                        onClick={() => { setSelectedCategory(c.id); setExpandedItem(null); }}
                        className={`shrink-0 flex items-center gap-2 py-2.5 px-2.5 transition-all duration-300 mx-1 mb-0.5 rounded-[12px] relative overflow-hidden ${isActive ? 'bg-white/60 shadow-[inset_0_1px_3px_rgba(255,255,255,0.9),0_2px_8px_rgba(0,0,0,0.02)] backdrop-blur-md' : 'hover:bg-black/[0.03] opacity-80 hover:opacity-100'}`}
                      >
-                       <CategoryIcon id={c.id} name={c.name || c.name_cn} isActive={isActive} className="shrink-0" />
-                       <span className={`text-[11.5px] leading-none text-left tracking-tight whitespace-nowrap transition-colors ${isActive ? 'font-bold text-[#333336]' : 'font-medium text-[#8e8e93]'}`}>{c.name || c.name_cn}</span>
+                       <CategoryIcon id={c.id} name={getSidebarCategoryLabel(c.name || c.name_cn)} isActive={isActive} className="shrink-0" />
+                       <span className={`text-[11.5px] leading-none text-left tracking-tight whitespace-nowrap transition-colors ${isActive ? 'font-bold text-[#333336]' : 'font-medium text-[#8e8e93]'}`}>{getSidebarCategoryLabel(c.name || c.name_cn)}</span>
                      </button>
                    );
                  })}
@@ -441,4 +463,3 @@ function CategoryIcon({ id, name, isActive, className }: { id?: string | null, n
     </div>
   );
 }
-

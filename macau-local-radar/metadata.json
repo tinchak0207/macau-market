@@ -1,6 +1,6 @@
 {
   "name": "Macau Local Radar",
-  "description": "Macau decision app featuring Grocery (今日抵買) and Bus Radar (落樓鐘), powered by real data and Liquid Glass iOS 26.5 aesthetic.",
+  "description": "Macau market price radar focused on grocery comparison, lowest-price discovery, and recipe cost estimation.",
   "requestFramePermissions": [
     "geolocation"
   ],

@@ -3,6 +3,10 @@ import path from "path";
 import axios from "axios";
 import { createServer as createViteServer } from "vite";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
+dotenv.config();
 
 const IAM_BASE_URL = "https://app.iam.gov.mo/marketinfo";
 const PORT = Number(process.env.PORT || 3000);
@@ -10,12 +14,20 @@ const PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
 const RECIPE_CACHE_TTL_MS = 5 * 60 * 1000;
 const BACKGROUND_PRICE_REFRESH_MS = 15 * 60 * 1000;
 const BACKGROUND_RECIPE_REFRESH_MS = 10 * 60 * 1000;
+const DAILY_WARM_CHECK_MS = 15 * 60 * 1000;
+const DAILY_WARM_HOUR = Number(process.env.PRICE_WARM_HOUR || 6);
+const PRICE_WARMUP_CONCURRENCY = Number(process.env.PRICE_WARMUP_CONCURRENCY || 4);
+const CRON_SECRET = process.env.APP_CRON_SECRET || "";
+const TIME_ZONE = process.env.TZ || "Asia/Hong_Kong";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   "";
+const SUPABASE_CAN_WRITE = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+const CATEGORY_CACHE_TTL_MS = 30 * 60 * 1000;
+const GOODS_CACHE_TTL_MS = 30 * 60 * 1000;
 
 type JsonRecord = Record<string, any>;
 
@@ -72,32 +84,89 @@ if (supabase) {
 
 const priceCache = new Map<string, CachedValue<NormalizedPriceRow[]>>();
 const recipeCache = new Map<string, CachedValue<any[]>>();
+const goodsCache = new Map<string, CachedValue<any[]>>();
+let categoriesCache: CachedValue<any[]> | null = null;
 const inFlightPriceRefresh = new Map<string, Promise<NormalizedPriceRow[]>>();
+const inFlightGoodsRequests = new Map<string, Promise<any[]>>();
+let categoriesRefreshPromise: Promise<any[]> | null = null;
 let recipeRefreshPromise: Promise<any[]> | null = null;
+let dailyPriceWarmPromise: Promise<void> | null = null;
+let lastDailyWarmDate = "";
 
 const FALLBACK_RECIPES: RecipeRow[] = [
   {
     id: 1,
-    name_cn: "Stir-fried Greens",
-    description: "Fallback recipe when DB is unavailable.",
-    image_emoji: "🥬",
+    name_cn: "番茄炒蛋",
+    description: "家常快手菜，酸甜開胃，配飯最穩陣。",
+    image_emoji: "🍅",
     cuisine: "cantonese",
     servings: 2,
     recipe_ingredient: [
-      { ingredient_name: "Leafy greens", quantity_kg: 0.4 },
-      { ingredient_name: "Garlic", quantity_kg: 0.02 },
+      { ingredient_name: "番茄", quantity_kg: 0.35, notes: "參考 The Woks of Life 的家常做法" },
+      { ingredient_name: "雞蛋", quantity_kg: 0.22 },
     ],
   },
   {
     id: 2,
-    name_cn: "Fish Fillet Soup",
-    description: "Fallback recipe when DB is unavailable.",
+    name_cn: "菜心蒜蓉炒",
+    description: "當造蔬菜最快完成，成本低，晚餐好搭配。",
+    image_emoji: "🥬",
+    cuisine: "cantonese",
+    servings: 2,
+    recipe_ingredient: [
+      { ingredient_name: "菜心", quantity_kg: 0.45, notes: "參考粵式青菜快炒方向" },
+      { ingredient_name: "蒜頭", quantity_kg: 0.03 },
+    ],
+  },
+  {
+    id: 3,
+    name_cn: "番茄蛋花湯",
+    description: "十五分鐘內完成，清爽又有飽足感。",
+    image_emoji: "🥣",
+    cuisine: "cantonese",
+    servings: 2,
+    recipe_ingredient: [
+      { ingredient_name: "番茄", quantity_kg: 0.3, notes: "可加蔥粒提升香氣" },
+      { ingredient_name: "雞蛋", quantity_kg: 0.18 },
+      { ingredient_name: "薑", quantity_kg: 0.02 },
+    ],
+  },
+  {
+    id: 4,
+    name_cn: "清蒸魚",
+    description: "粵式家常代表，食材簡單，重點在鮮味。",
     image_emoji: "🐟",
     cuisine: "cantonese",
     servings: 2,
     recipe_ingredient: [
-      { ingredient_name: "Fish fillet", quantity_kg: 0.3 },
-      { ingredient_name: "Ginger", quantity_kg: 0.05 },
+      { ingredient_name: "魚", quantity_kg: 0.55, notes: "參考 Made With Lau 粵式蒸魚思路" },
+      { ingredient_name: "薑", quantity_kg: 0.03 },
+      { ingredient_name: "蔥", quantity_kg: 0.03 },
+    ],
+  },
+  {
+    id: 5,
+    name_cn: "白菜仔湯",
+    description: "簡單清湯，適合配煎炒主菜。",
+    image_emoji: "🥣",
+    cuisine: "cantonese",
+    servings: 2,
+    recipe_ingredient: [
+      { ingredient_name: "白菜", quantity_kg: 0.4, notes: "走清甜路線，適合家庭晚餐" },
+      { ingredient_name: "薑", quantity_kg: 0.02 },
+    ],
+  },
+  {
+    id: 6,
+    name_cn: "鮮魷炒白菜",
+    description: "海鮮加時蔬，口感爽脆，適合平日晚餐。",
+    image_emoji: "🦑",
+    cuisine: "cantonese",
+    servings: 2,
+    recipe_ingredient: [
+      { ingredient_name: "鮮魷", quantity_kg: 0.32 },
+      { ingredient_name: "白菜", quantity_kg: 0.3 },
+      { ingredient_name: "蒜頭", quantity_kg: 0.02 },
     ],
   },
 ];
@@ -112,6 +181,20 @@ function getCacheKey(goodsId: string, goodsItemId?: string | null) {
 
 function isFresh(fetchedAt: number, ttlMs: number) {
   return Date.now() - fetchedAt < ttlMs;
+}
+
+function getLocalDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(date);
+}
+
+function getLocalHour(date = new Date()) {
+  return Number(
+    new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: TIME_ZONE,
+    }).format(date),
+  );
 }
 
 function toNumber(value: unknown) {
@@ -147,12 +230,46 @@ function estimateIngredientPricePerKg(name: string) {
   if (!name) return 30;
   const lower = name.toLowerCase();
 
-  if (lower.includes("菜") || lower.includes("greens") || lower.includes("leaf")) return 25;
-  if (lower.includes("肉") || lower.includes("pork") || lower.includes("beef")) return 80;
-  if (lower.includes("魚") || lower.includes("fish")) return 70;
+  if (
+    lower.includes("菜") ||
+    lower.includes("蔬") ||
+    lower.includes("白菜") ||
+    lower.includes("菜心") ||
+    lower.includes("greens") ||
+    lower.includes("leaf")
+  ) return 25;
+
+  if (
+    lower.includes("肉") ||
+    lower.includes("豬") ||
+    lower.includes("牛") ||
+    lower.includes("pork") ||
+    lower.includes("beef")
+  ) return 80;
+
+  if (
+    lower.includes("魚") ||
+    lower.includes("鮮魷") ||
+    lower.includes("魷") ||
+    lower.includes("fish") ||
+    lower.includes("squid")
+  ) return 70;
+
   if (lower.includes("蛋") || lower.includes("egg")) return 20;
+  if (lower.includes("番茄") || lower.includes("tomato")) return 18;
+  if (lower.includes("薑") || lower.includes("ginger")) return 32;
+  if (lower.includes("蒜") || lower.includes("garlic")) return 28;
+  if (lower.includes("蔥") || lower.includes("scallion")) return 24;
 
   return 30;
+}
+
+function requireCronAuth(req: express.Request) {
+  if (!CRON_SECRET) {
+    return true;
+  }
+
+  return req.headers.authorization === `Bearer ${CRON_SECRET}`;
 }
 
 function normalizeIamPrices(
@@ -274,7 +391,7 @@ async function fetchIamPrices(goodsId: string, goodsItemId?: string | null) {
 }
 
 async function syncWithSupabase(table: string, data: JsonRecord | JsonRecord[], onConflict?: string) {
-  if (!supabase) return;
+  if (!supabase || !SUPABASE_CAN_WRITE) return;
 
   try {
     const query = supabase.from(table).upsert(data, onConflict ? { onConflict } : undefined);
@@ -352,6 +469,10 @@ async function writeLatestPrices(goodsId: string, goodsItemId: string | null | u
 }
 
 async function refreshPriceCache(goodsId: string, goodsItemId?: string | null) {
+  if (goodsId.startsWith("est-")) {
+    return [];
+  }
+
   const cacheKey = getCacheKey(goodsId, goodsItemId);
   const existing = inFlightPriceRefresh.get(cacheKey);
   if (existing) {
@@ -397,8 +518,65 @@ async function getOrLoadPrices(goodsId: string, goodsItemId?: string | null) {
     return dbRows;
   }
 
-  const freshRows = await refreshPriceCache(goodsId, goodsItemId);
-  return freshRows;
+  return refreshPriceCache(goodsId, goodsItemId);
+}
+
+async function getOrLoadCategories() {
+  if (categoriesCache && categoriesCache.value.length && isFresh(categoriesCache.fetchedAt, CATEGORY_CACHE_TTL_MS)) {
+    return categoriesCache.value;
+  }
+
+  if (categoriesRefreshPromise) {
+    return categoriesRefreshPromise;
+  }
+
+  categoriesRefreshPromise = fetchCategoriesFromIam()
+    .then(async (categories) => {
+      categoriesCache = { value: categories, fetchedAt: Date.now() };
+      await syncWithSupabase("goods_category", categories, "id");
+      return categories;
+    })
+    .finally(() => {
+      categoriesRefreshPromise = null;
+    });
+
+  return categoriesRefreshPromise;
+}
+
+async function getOrLoadGoods(categoryId: string) {
+  const cached = goodsCache.get(categoryId);
+  if (cached && isFresh(cached.fetchedAt, GOODS_CACHE_TTL_MS)) {
+    return cached.value;
+  }
+
+  const existing = inFlightGoodsRequests.get(categoryId);
+  if (existing) {
+    return existing;
+  }
+
+  const request = fetchGoodsFromIam(categoryId)
+    .then(async (goods) => {
+      goodsCache.set(categoryId, { value: goods, fetchedAt: Date.now() });
+      await syncWithSupabase(
+        "goods_item",
+        goods.map((item) => ({
+          id: item.goods_id,
+          goods_id: item.goods_id,
+          category_id: categoryId,
+          name_cn: item.goods_name,
+          default_unit: 2,
+          updated_at: new Date().toISOString(),
+        })),
+        "goods_id",
+      );
+      return goods;
+    })
+    .finally(() => {
+      inFlightGoodsRequests.delete(categoryId);
+    });
+
+  inFlightGoodsRequests.set(categoryId, request);
+  return request;
 }
 
 async function loadRecipes() {
@@ -457,6 +635,71 @@ async function readLatestPricesForGoodsIds(goodsIds: string[]) {
   }
 }
 
+async function readLowestPricesForGoodsIds(goodsIds: string[]) {
+  const latestPriceByGoodsId = await readLatestPricesForGoodsIds(goodsIds);
+  return goodsIds
+    .map((goodsId) => {
+      const row = latestPriceByGoodsId.get(goodsId);
+      if (!row) return null;
+
+      return {
+        ...row,
+        price: row.normalized_price,
+      };
+    })
+    .filter(isDefined);
+}
+
+async function warmPricesForGoodsList(goodsList: Array<{ goods_id: string; goods_item_id?: string | null }>) {
+  const queue = goodsList.filter((item) => item.goods_id && !item.goods_id.startsWith("est-"));
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < queue.length) {
+      const current = queue[cursor++];
+      try {
+        await refreshPriceCache(current.goods_id, current.goods_item_id || null);
+      } catch (error: any) {
+        console.log(`Warm price refresh failed for ${current.goods_id}:`, error.message);
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(PRICE_WARMUP_CONCURRENCY, Math.max(queue.length, 1)) }, () =>
+      worker(),
+    ),
+  );
+}
+
+async function warmDailyPrices() {
+  if (dailyPriceWarmPromise) {
+    return dailyPriceWarmPromise;
+  }
+
+  dailyPriceWarmPromise = (async () => {
+    const categories = await getOrLoadCategories();
+    const goodsByCategory = await Promise.all(
+      categories.map(async (category) => {
+        const goods = await getOrLoadGoods(String(category.id));
+        return goods.map((item) => ({
+          goods_id: String(item.goods_id),
+          goods_item_id: item.goods_item_id ? String(item.goods_item_id) : String(category.id),
+        }));
+      }),
+    );
+
+    const flattenedGoods = goodsByCategory.flat();
+    await warmPricesForGoodsList(flattenedGoods);
+    lastDailyWarmDate = getLocalDateKey();
+    console.log(`Daily price warm completed for ${flattenedGoods.length} goods on ${lastDailyWarmDate}.`);
+  })().finally(() => {
+    dailyPriceWarmPromise = null;
+  });
+
+  return dailyPriceWarmPromise;
+}
+
 async function writeRecipeSnapshots(recipes: any[]) {
   if (!recipes.length) return;
 
@@ -483,7 +726,10 @@ async function computeRecipeSnapshots() {
   );
 
   const latestPriceByGoodsId = await readLatestPricesForGoodsIds(goodsIds);
-  const missingGoodsIds = goodsIds.filter((goodsId) => !latestPriceByGoodsId.has(goodsId));
+  const missingGoodsIds = goodsIds.filter(
+    (goodsId) => !goodsId.startsWith("est-") && !latestPriceByGoodsId.has(goodsId),
+  );
+
   if (missingGoodsIds.length) {
     for (const goodsId of missingGoodsIds) {
       triggerBackgroundPriceRefresh(goodsId, null);
@@ -498,14 +744,16 @@ async function computeRecipeSnapshots() {
           ? latestPriceByGoodsId.get(ingredient.goods_id)
           : undefined;
         const livePricePerCatty = matchedPrice?.normalized_price ?? null;
-        const livePricePerKg = livePricePerCatty ? livePricePerCatty / 0.6 : estimateIngredientPricePerKg(ingredient.ingredient_name);
+        const livePricePerKg = livePricePerCatty
+          ? livePricePerCatty / 0.6
+          : estimateIngredientPricePerKg(ingredient.ingredient_name);
         const totalIngredientCost = livePricePerKg * quantityKg;
 
         return {
           ...ingredient,
           live_price_per_kg: livePricePerKg,
           total_ingredient_cost: totalIngredientCost,
-          cheapest_market: matchedPrice?.market_name || "Estimated",
+          cheapest_market: matchedPrice?.market_name || "估算資料",
           price_source: matchedPrice ? matchedPrice.source : "estimate",
         };
       });
@@ -525,6 +773,11 @@ async function computeRecipeSnapshots() {
   recipeCache.set("recipes", { value: enrichedRecipes, fetchedAt: Date.now() });
   await writeRecipeSnapshots(enrichedRecipes);
   return enrichedRecipes;
+}
+
+async function runDailyRefreshTasks() {
+  await warmDailyPrices();
+  await computeRecipeSnapshots();
 }
 
 function triggerBackgroundRecipeRefresh() {
@@ -586,7 +839,28 @@ async function getOrLoadRecipeSnapshots() {
   return recipeRefreshPromise;
 }
 
+function shouldRunDailyWarm(now = new Date()) {
+  const currentDateKey = getLocalDateKey(now);
+  if (lastDailyWarmDate === currentDateKey) {
+    return false;
+  }
+
+  return getLocalHour(now) >= DAILY_WARM_HOUR;
+}
+
+function ensureDailyWarm() {
+  if (!shouldRunDailyWarm()) {
+    return;
+  }
+
+  void runDailyRefreshTasks().catch((error) => {
+    console.log("Daily price warm failed:", error.message);
+  });
+}
+
 function startBackgroundRefreshLoops() {
+  ensureDailyWarm();
+
   setInterval(() => {
     const keys = Array.from(priceCache.keys());
     for (const cacheKey of keys) {
@@ -600,6 +874,10 @@ function startBackgroundRefreshLoops() {
   setInterval(() => {
     triggerBackgroundRecipeRefresh();
   }, BACKGROUND_RECIPE_REFRESH_MS);
+
+  setInterval(() => {
+    ensureDailyWarm();
+  }, DAILY_WARM_CHECK_MS);
 }
 
 async function startServer() {
@@ -608,8 +886,7 @@ async function startServer() {
 
   app.get("/api/grocery/categories", async (_req, res) => {
     try {
-      const categories = await fetchCategoriesFromIam();
-      void syncWithSupabase("goods_category", categories, "id");
+      const categories = await getOrLoadCategories();
       return res.json({ data: categories });
     } catch (error: any) {
       console.error("IAM categories failed:", error.message);
@@ -624,7 +901,7 @@ async function startServer() {
         return res.status(400).json({ error: "category_id is required" });
       }
 
-      const goods = await fetchGoodsFromIam(String(categoryId));
+      const goods = await getOrLoadGoods(String(categoryId));
       return res.json({ data: goods });
     } catch (error: any) {
       console.error("IAM goods failed:", error.message);
@@ -639,7 +916,11 @@ async function startServer() {
         return res.status(400).json({ error: "goods_id is required" });
       }
 
-      const prices = await getOrLoadPrices(String(goodsId), goodsItemId ? String(goodsItemId) : null);
+      const prices = await getOrLoadPrices(
+        String(goodsId),
+        goodsItemId ? String(goodsItemId) : null,
+      );
+
       return res.json({
         data: prices.map((price) => ({
           ...price,
@@ -654,6 +935,34 @@ async function startServer() {
     }
   });
 
+  app.post("/api/grocery/prices/summary", async (req, res) => {
+    try {
+      const goodsIds = Array.isArray(req.body?.goods_ids)
+        ? req.body.goods_ids.map((value: unknown) => String(value)).filter(Boolean)
+        : [];
+
+      if (!goodsIds.length) {
+        return res.status(400).json({ error: "goods_ids is required" });
+      }
+
+      const summaries = await readLowestPricesForGoodsIds(goodsIds);
+      const foundIds = new Set(summaries.map((item) => item.goods_id));
+      const missingIds = goodsIds.filter((goodsId) => !foundIds.has(goodsId));
+      for (const goodsId of missingIds) {
+        triggerBackgroundPriceRefresh(goodsId, null);
+      }
+
+      return res.json({
+        data: summaries,
+        missing_goods_ids: missingIds,
+        cached: true,
+      });
+    } catch (error: any) {
+      console.error("Price summary lookup failed:", error.message);
+      return res.status(500).json({ error: "Failed to fetch price summaries" });
+    }
+  });
+
   app.get("/api/grocery/recipes", async (_req, res) => {
     try {
       const recipes = await getOrLoadRecipeSnapshots();
@@ -661,6 +970,24 @@ async function startServer() {
     } catch (error: any) {
       console.error("Recipe processing failed:", error.message);
       return res.status(500).json({ error: "Recipe processing failed" });
+    }
+  });
+
+  app.post("/api/internal/refresh-daily", async (req, res) => {
+    if (!requireCronAuth(req)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    try {
+      await runDailyRefreshTasks();
+      return res.json({
+        ok: true,
+        warmed_at: new Date().toISOString(),
+        local_date: getLocalDateKey(),
+      });
+    } catch (error: any) {
+      console.error("Daily refresh failed:", error.message);
+      return res.status(500).json({ error: "Daily refresh failed" });
     }
   });
 
