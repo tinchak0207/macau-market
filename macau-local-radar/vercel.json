@@ -3,6 +3,12 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.market.tinchak0207.xyz/api/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/manifest.webmanifest",

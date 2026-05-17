@@ -1,7 +1,5 @@
-const CACHE_NAME = 'macau-market-radar-v1';
+const CACHE_NAME = 'macau-market-radar-v2';
 const APP_SHELL = [
-  '/',
-  '/index.html',
   '/adaptive.html',
   '/offline.html',
   '/manifest.webmanifest',
@@ -39,6 +37,28 @@ self.addEventListener('fetch', (event) => {
           status: 503,
         }),
       ),
+    );
+    return;
+  }
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && requestUrl.origin === self.location.origin) {
+            const responseClone = networkResponse.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cachedResponse = await caches.match(event.request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+
+          return caches.match('/offline.html');
+        }),
     );
     return;
   }

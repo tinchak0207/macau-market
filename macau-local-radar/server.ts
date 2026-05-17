@@ -19,13 +19,21 @@ const DAILY_WARM_HOUR = Number(process.env.PRICE_WARM_HOUR || 6);
 const PRICE_WARMUP_CONCURRENCY = Number(process.env.PRICE_WARMUP_CONCURRENCY || 4);
 const CRON_SECRET = process.env.APP_CRON_SECRET || "";
 const TIME_ZONE = process.env.TZ || "Asia/Hong_Kong";
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS ||
+    "https://market.tinchak0207.xyz,https://www.market.tinchak0207.xyz")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "";
 const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
+  SUPABASE_SERVICE_ROLE_KEY ||
+  SUPABASE_ANON_KEY ||
   "";
-const SUPABASE_CAN_WRITE = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const CATEGORY_CACHE_TTL_MS = 30 * 60 * 1000;
 const GOODS_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -75,11 +83,40 @@ type RecipeSnapshot = {
   computed_at: string;
 };
 
+function decodeJwtRole(token: string) {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const json = Buffer.from(padded, "base64").toString("utf8");
+    const parsed = JSON.parse(json);
+    return typeof parsed.role === "string" ? parsed.role : null;
+  } catch {
+    return null;
+  }
+}
+
+const SUPABASE_SERVICE_ROLE = decodeJwtRole(SUPABASE_SERVICE_ROLE_KEY);
+const SUPABASE_CAN_WRITE = SUPABASE_SERVICE_ROLE === "service_role";
+
 const supabase: SupabaseClient | null =
   SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 if (supabase) {
   console.log("Supabase client initialized.");
+}
+
+if (SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_CAN_WRITE) {
+  console.warn(
+    `SUPABASE_SERVICE_ROLE_KEY is present but has role "${SUPABASE_SERVICE_ROLE || "unknown"}". ` +
+      `Expected "service_role". Database writes are disabled until this is fixed.`,
+  );
+}
+
+if (!SUPABASE_SERVICE_ROLE_KEY) {
+  console.warn("SUPABASE_SERVICE_ROLE_KEY is missing. Database writes are disabled.");
 }
 
 const priceCache = new Map<string, CachedValue<NormalizedPriceRow[]>>();
@@ -882,6 +919,25 @@ function startBackgroundRefreshLoops() {
 
 async function startServer() {
   const app = express();
+
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+
+    if (origin && ALLOWED_ORIGINS.has(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(204);
+    }
+
+    next();
+  });
+
   app.use(express.json());
 
   app.get("/api/grocery/categories", async (_req, res) => {
