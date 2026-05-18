@@ -38,6 +38,21 @@ Do not deploy this backend to a purely static Vercel setup. The app uses:
 - periodic warm-up loops
 - a protected internal refresh endpoint
 
+### Cold start on Render
+
+Render free web services can spin down after inactivity, which causes the next request to wait for the service to start again. If you need the API to stay responsive, use one of these:
+
+1. Preferred: run the backend on a non-sleeping instance tier / provider.
+2. Budget workaround: ping `GET /api/health` every 10 minutes.
+
+Example warm URL:
+
+```bash
+https://macau-market-api.onrender.com/api/health
+```
+
+This repo includes a GitHub Actions workflow at `.github/workflows/keep-render-warm.yml` that pings the health endpoint every 10 minutes.
+
 ### Frontend env
 
 Set this in Vercel:
