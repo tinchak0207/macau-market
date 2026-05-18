@@ -940,6 +940,14 @@ async function startServer() {
 
   app.use(express.json());
 
+  app.get("/api/health", (_req, res) => {
+    return res.json({
+      ok: true,
+      uptime_s: Math.round(process.uptime()),
+      now: new Date().toISOString(),
+    });
+  });
+
   app.get("/api/grocery/categories", async (_req, res) => {
     try {
       const categories = await getOrLoadCategories();
